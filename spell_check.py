@@ -22,40 +22,12 @@ class Distance2:
    def compute(self):
       return self.__value
 
-class LevenshteinDistance:
-   def __init__(self, w, ww):
-      self.__value = 0
-      lw = len(w)
-      lw1 = lw + 1
-      lww = len(ww)
-      lww1 = lww + 1
-
-      d = [[0] * lww1] * lw1
-      
-      for i in xrange(1, lw1): 
-         d[i][0] = i
-
-      for j in xrange(1, lww1): 
-         d[0][j] = j
-
-      for j in xrange(1, lww):
-         for i in xrange(1, lw):
-            if ww[j] == w[i]:
-               subcost = 0
-            else:
-               subcost = 1
-            d[i][j] = 1.0/min([d[i-1][j]  + 1, d[i][j-1] + 1, d[i-1][j-1] + subcost])
-
-      self.__value = d[lw][lww]
-
-   def compute(self):
-      return self.__value
-
 
 class Distance:
    def __init__(self, w, ww):
       self.__value = 0.
-      self.__value = (self.__one_way_embed(w, ww) + self.__one_way_embed(ww, w))/2.0
+      lendiff = 1.0 + abs(len(w) - len(ww))
+      self.__value = (self.__one_way_embed(w, ww) + self.__one_way_embed(ww, w))/(lendiff*lendiff)
 
    def __one_way_embed(self, w, ww):
       ww_idx = 0
@@ -157,60 +129,46 @@ class SpellChecker:
 
    def __wordmatchScore(self, w, ww):
       # Compute a score giving the closeness of the match between these words.
-      #d = Distance(w, ww)
-      #d = LevenshteinDistance(w, ww)
-      d = Distance2(w, ww)
+      d = Distance(w, ww)
+      #d = Distance2(w, ww)
       return d.compute()
 
    def __populateSubs(self, w):
-      ns = self._n_subs
+      ns = min([self._n_subs, len(self._words)])
       sl = [None] * (ns + 1)
       sl[0] = False
       subs = [None] * ns
       ns1 = ns+1
 
       min_wms = None
+      n_words = 0
+      first_sort = False
 
       for ww in self._words.iterkeys():
          w_score = self.__wordmatchScore(w, ww)
          if min_wms is not None and w_score < min_wms and subs[-1] is not None:
             continue
 
-         # Look for an empty slot
-         found_empty = False
-         for x in xrange(1, ns1):
-            if subs[-x] is None:
-               subs[-x] = [w_score, ww]
-               found_empty = True
-               break  
+         # The substitute word list is NOT full, so we just add the newest score
+         if n_words < ns:
+            subs[n_words] = [w_score, ww]
+            n_words += 1
+            continue
 
-         if found_empty:
+         if not first_sort:
             subs.sort()
-            min_wms = subs[-1][0]
-            continue
+            min_wms = subs[0][0]
+            first_sort = True
 
-         # The word list is full, so we check scores
+         # The substitute word list is full, so we check scores
          # Check the current minimum score
-         if subs[-1][0] >= w_score:
+         if subs[0][0] >= w_score:
             continue
+         else:
+            subs[0] = [w_score, ww]
+            subs.sort()
 
-
-         # Bubble the new entry up
-         for x in xrange(1, ns):
-            entry = subs[-x]
-            prev_entry = subs[-(x+1)]
-            if entry[0] > prev_entry[0]:
-               # Swap
-               tmp_score = entry[0]
-               tmp_ww = entry[1]
-               entry[0] = prev_entry[0]
-               entry[1] = prev_entry[1]
-               prev_entry[0] = tmp_score
-               prev_entry[1] = tmp_ww
-            else:
-               break
-            
-         min_wms = subs[-1][0]
+         min_wms = subs[0][0]
 
       for zz, entry in enumerate(subs):
          sl[zz+1] = entry[1]
@@ -279,6 +237,6 @@ if __name__ == "__main__":
    dict_file = sys.argv[1]
    text = sys.argv[2]
 
-   sc = SpellChecker(dict_file, 2, 10)
+   sc = SpellChecker(dict_file, 2, 6)
 
    sc.check(text)
